@@ -1,0 +1,73 @@
+{
+	"name": "AzureSqlTable2",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "AzureSqlDatabase1",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "id",
+				"type": "uniqueidentifier"
+			},
+			{
+				"name": "title",
+				"type": "nvarchar"
+			},
+			{
+				"name": "description",
+				"type": "nvarchar"
+			},
+			{
+				"name": "type",
+				"type": "nvarchar"
+			},
+			{
+				"name": "destination_country",
+				"type": "uniqueidentifier"
+			},
+			{
+				"name": "study_field",
+				"type": "uniqueidentifier"
+			},
+			{
+				"name": "user_id",
+				"type": "uniqueidentifier"
+			},
+			{
+				"name": "is_active",
+				"type": "bit"
+			},
+			{
+				"name": "created_at",
+				"type": "datetimeoffset",
+				"scale": 7
+			},
+			{
+				"name": "updated_at",
+				"type": "datetimeoffset",
+				"scale": 7
+			},
+			{
+				"name": "deleted_at",
+				"type": "datetimeoffset",
+				"scale": 7
+			},
+			{
+				"name": "slug",
+				"type": "nvarchar"
+			},
+			{
+				"name": "college_id",
+				"type": "uniqueidentifier"
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "posts"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

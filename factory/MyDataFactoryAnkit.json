@@ -1,5 +1,13 @@
 {
 	"name": "MyDataFactoryAnkit",
+	"properties": {
+		"globalParameters": {
+			"SourceStorageAccountName": {
+				"type": "string",
+				"value": "assa"
+			}
+		}
+	},
 	"location": "southindia",
 	"identity": {
 		"type": "SystemAssigned",

@@ -53,7 +53,29 @@
 				],
 				"userProperties": [],
 				"typeProperties": {
-					"waitOnCompletion": true
+					"waitOnCompletion": true,
+					"parameters": {
+						"JobContainerName": {
+							"value": "@variables('JobContainerName')",
+							"type": "Expression"
+						},
+						"TaskOutputFolderPrefix": {
+							"value": "@pipeline().parameters.TaskOutputFolderPrefix",
+							"type": "Expression"
+						},
+						"OutputStorageAccountName": {
+							"value": "@pipeline().parameters.OutputStorageAccountName",
+							"type": "Expression"
+						},
+						"OutputContainerName": {
+							"value": "@pipeline().parameters.OutputContainerName",
+							"type": "Expression"
+						},
+						"OutputFolderName": {
+							"value": "@pipeline().parameters.OutputFolderName",
+							"type": "Expression"
+						}
+					}
 				}
 			},
 			{
@@ -264,10 +286,6 @@
 				],
 				"userProperties": [],
 				"typeProperties": {
-					"pipeline": {
-						"referenceName": "monitor_batch_job",
-						"type": "PipelineReference"
-					},
 					"waitOnCompletion": true,
 					"parameters": {
 						"JobId": {

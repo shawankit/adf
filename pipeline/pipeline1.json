@@ -129,6 +129,24 @@
 				}
 			}
 		],
+		"parameters": {
+			"Source1": {
+				"type": "string",
+				"defaultValue": "PostgreSqlTable1"
+			},
+			"Source2": {
+				"type": "string",
+				"defaultValue": "PostgreSqlTable2"
+			},
+			"Sink1": {
+				"type": "string",
+				"defaultValue": "AzureSqlTable1"
+			},
+			"Sink2": {
+				"type": "string",
+				"defaultValue": "AzureSqlTable2"
+			}
+		},
 		"annotations": [],
 		"lastPublishTime": "2023-12-29T06:26:52Z"
 	},

@@ -53,11 +53,29 @@
 				],
 				"userProperties": [],
 				"typeProperties": {
-					"pipeline": {
-						"referenceName": "pipeline2",
-						"type": "PipelineReference"
-					},
-					"waitOnCompletion": true
+					"waitOnCompletion": true,
+					"parameters": {
+						"JobContainerName": {
+							"value": "@variables('JobContainerName')",
+							"type": "Expression"
+						},
+						"TaskOutputFolderPrefix": {
+							"value": "@pipeline().parameters.TaskOutputFolderPrefix",
+							"type": "Expression"
+						},
+						"OutputStorageAccountName": {
+							"value": "@pipeline().parameters.OutputStorageAccountName",
+							"type": "Expression"
+						},
+						"OutputContainerName": {
+							"value": "@pipeline().parameters.OutputContainerName",
+							"type": "Expression"
+						},
+						"OutputFolderName": {
+							"value": "@pipeline().parameters.OutputFolderName",
+							"type": "Expression"
+						}
+					}
 				}
 			},
 			{
@@ -268,11 +286,13 @@
 				],
 				"userProperties": [],
 				"typeProperties": {
-					"pipeline": {
-						"referenceName": "pipeline1",
-						"type": "PipelineReference"
-					},
-					"waitOnCompletion": true
+					"waitOnCompletion": true,
+					"parameters": {
+						"JobId": {
+							"value": "@pipeline().parameters.JobId",
+							"type": "Expression"
+						}
+					}
 				}
 			},
 			{

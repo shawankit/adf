@@ -1,6 +1,11 @@
 {
 	"name": "monitor_batch_job",
 	"properties": {
+		"parameters": {
+			"JobId": {
+				"type": "string"
+			}
+		},
 		"folder": {
 			"name": "batch"
 		},

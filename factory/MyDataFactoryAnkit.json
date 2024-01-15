@@ -9,6 +9,10 @@
 			"BatchStorageAccountName": {
 				"type": "string",
 				"value": "BatchStorageAccountName"
+			},
+			"BatchURI": {
+				"type": "string",
+				"value": "BatchURI"
 			}
 		}
 	},

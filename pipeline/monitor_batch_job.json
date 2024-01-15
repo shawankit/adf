@@ -22,7 +22,12 @@
 		],
 		"parameters": {
 			"JobId": {
-				"type": "string"
+				"type": "string",
+				"defaultValue": "JobId"
+			},
+			"JobId2": {
+				"type": "string",
+				"defaultValue": "JobId"
 			}
 		},
 		"folder": {

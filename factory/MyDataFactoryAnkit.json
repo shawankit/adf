@@ -5,6 +5,10 @@
 			"SourceStorageAccountName": {
 				"type": "string",
 				"value": "assa"
+			},
+			"BatchStorageAccountName": {
+				"type": "string",
+				"value": "BatchStorageAccountName"
 			}
 		}
 	},

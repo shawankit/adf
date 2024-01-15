@@ -1,0 +1,9 @@
+{
+	"name": "monitor_batch_job",
+	"properties": {
+		"folder": {
+			"name": "batch"
+		},
+		"annotations": []
+	}
+}

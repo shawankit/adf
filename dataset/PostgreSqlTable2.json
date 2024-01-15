@@ -5,6 +5,12 @@
 			"referenceName": "PostgreSql1",
 			"type": "LinkedServiceReference"
 		},
+		"parameters": {
+			"table1": {
+				"type": "string",
+				"defaultValue": "users"
+			}
+		},
 		"annotations": [],
 		"type": "PostgreSqlTable",
 		"schema": [],

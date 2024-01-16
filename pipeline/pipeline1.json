@@ -81,7 +81,10 @@
 				"inputs": [
 					{
 						"referenceName": "PostgreSqlTable2",
-						"type": "DatasetReference"
+						"type": "DatasetReference",
+						"parameters": {
+							"table1": "users"
+						}
 					}
 				],
 				"outputs": [

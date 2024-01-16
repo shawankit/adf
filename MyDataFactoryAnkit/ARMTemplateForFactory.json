@@ -1,0 +1,1108 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "MyDataFactoryAnkit"
+		},
+		"AzureSqlDatabase1_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'AzureSqlDatabase1'"
+		},
+		"AzureTableStorage1_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'AzureTableStorage1'"
+		},
+		"PostgreSql1_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'PostgreSql1'"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/batch_job')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Create Job Storage Container",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Set Job Container URL",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": {
+								"value": "@concat(variables('JobContainerURL'), '?restype=container')",
+								"type": "Expression"
+							},
+							"method": "PUT",
+							"headers": {
+								"x-ms-version": "2023-01-03"
+							},
+							"body": {
+								"value": "@concat('{','}')",
+								"type": "Expression"
+							},
+							"authentication": {
+								"type": "MSI",
+								"resource": "https://storage.azure.com"
+							}
+						}
+					},
+					{
+						"name": "Copy Output Files",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "Monitor Batch Job",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "pipeline2",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "Delete Job Storage Container",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Copy Output Files",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": {
+								"value": "@concat('https://',pipeline().globalParameters.BatchStorageAccountName,'.blob.core.windows.net/',variables('JobContainerName'),'?restype=container')",
+								"type": "Expression"
+							},
+							"method": "DELETE",
+							"headers": {
+								"x-ms-version": "2023-01-03"
+							},
+							"authentication": {
+								"type": "MSI",
+								"resource": "https://storage.azure.com"
+							}
+						}
+					},
+					{
+						"name": "Start Job",
+						"type": "WebActivity",
+						"dependsOn": [
+							{
+								"activity": "Set Job Container URL",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Set ManagerApplicationPackagePath",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Set WorkloadApplicationPackagePath",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Set CommonEnvironmentSettings",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Create Job Storage Container",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 3,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": {
+								"value": "@concat(pipeline().globalParameters.BatchURI,'/jobs?api-version=2022-10-01.16.0')",
+								"type": "Expression"
+							},
+							"method": "POST",
+							"headers": {
+								"Content-Type": "application/json; odata=minimalmetadata"
+							},
+							"body": {
+								"value": "@concat('{\n    \"id\": \"', pipeline().parameters.JobId,'\",\n    \"priority\": 100,\n    \"constraints\": {\n        \"maxWallClockTime\":\"',pipeline().parameters.BatchJobTimeout,'\",\n        \"maxTaskRetryCount\": 0\n    },\n    \"jobManagerTask\": {\n        \"id\": \"Manager\",\n        \"displayName\": \"Manager\",\n        \"authenticationTokenSettings\": {\n            \"access\": [\n                \"job\"\n            ]\n        },\n        \"commandLine\": \"/bin/bash -c \\\"python3 -m ensurepip --upgrade && python3 -m pip install --user ',variables('ManagerApplicationPackagePath'),' && python3 -m pip install --user ',variables('WorkloadApplicationPackagePath'),' && python3 -m ',pipeline().parameters.WorkloadApplicationPackageName,' job ', pipeline().parameters.ManagerTaskParameters,'\\\"\",\n        \"applicationPackageReferences\": [\n            {\n                \"applicationId\": \"',pipeline().parameters.ManagerApplicationPackageName,'\",\n                \"version\": \"',pipeline().parameters.ManagerApplicationPackageVersion,'\"\n            },\n            {\n                \"applicationId\": \"',pipeline().parameters.WorkloadApplicationPackageName,'\",\n                \"version\": \"',pipeline().parameters.WorkloadApplicationPackageVersion,'\"\n            }\n        ],\n        \"outputFiles\": [\n            {\n                \"destination\": {\n                    \"container\": {\n                        \"containerUrl\": \"',variables('JobContainerURL'),'\",\n                        \"identityReference\": {\n                            \"resourceId\": \"',variables('UserAssignedIdentityReference'),'\"\n                        },\n                        \"path\": \"Manager/$TaskLog\"\n                    }\n                },\n                \"filePattern\": \"../*.txt\",\n                \"uploadOptions\": {\n                    \"uploadCondition\": \"taskcompletion\"\n                }\n            }\n        ],\n        \"environmentSettings\": [],\n        \"requiredSlots\": 1,\n        \"killJobOnCompletion\": false,\n        \"userIdentity\": {\n            \"username\": null,\n            \"autoUser\": {\n                \"scope\": \"pool\",\n                \"elevationLevel\": \"nonadmin\"\n            }\n        },\n        \"runExclusive\": true,\n        \"allowLowPriorityNode\": true\n    },\n    \"poolInfo\": {\n        \"poolId\": \"',pipeline().parameters.BatchPoolId,'\"\n    },\n    \"onAllTasksComplete\": \"terminatejob\",\n    \"onTaskFailure\": \"noaction\",\n    \"usesTaskDependencies\": true,\n    \"commonEnvironmentSettings\": ', string(union(variables('CommonEnvironmentSettings'), pipeline().parameters.JobAdditionalEnvironmentSettings)),\n'}')",
+								"type": "Expression"
+							},
+							"authentication": {
+								"type": "MSI",
+								"resource": "https://batch.core.windows.net/"
+							}
+						}
+					},
+					{
+						"name": "Set Job Container URL",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Set JobContainerName",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "JobContainerURL",
+							"value": {
+								"value": "@concat('https://',pipeline().globalParameters.BatchStorageAccountName,'.blob.core.windows.net/', variables('JobContainerName'))",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set UserAssignedIdentityReference",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "UserAssignedIdentityReference",
+							"value": {
+								"value": "@concat('/subscriptions/',pipeline().globalParameters.BatchAccountSubscription,'/resourcegroups/',pipeline().globalParameters.BatchAccountResourceGroup,'/providers/Microsoft.ManagedIdentity/userAssignedIdentities/',pipeline().parameters.WorkloadUserAssignedIdentityName)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set ManagerApplicationPackagePath",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "ManagerApplicationPackagePath",
+							"value": {
+								"value": "@concat('$AZ_BATCH_APP_PACKAGE_',\n    pipeline().parameters.ManagerApplicationPackageName,'_',replace(replace(pipeline().parameters.ManagerApplicationPackageVersion,'.','_'),'-','_'),'/',pipeline().parameters.ManagerApplicationPackageName,'.tar.gz')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set WorkloadApplicationPackagePath",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "WorkloadApplicationPackagePath",
+							"value": {
+								"value": "@concat('$AZ_BATCH_APP_PACKAGE_',\n    pipeline().parameters.WorkloadApplicationPackageName,'_',replace(replace(pipeline().parameters.WorkloadApplicationPackageVersion,'.','_'),'-','_'),'/',pipeline().parameters.WorkloadApplicationPackageName,'.tar.gz')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set CommonEnvironmentSettings",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Set UserAssignedIdentityReference",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "CommonEnvironmentSettings",
+							"value": {
+								"value": "@json(\n    concat('[\n    {\n        \"name\": \"WORKLOAD_APP_PACKAGE\",\n        \"value\": \"',pipeline().parameters.WorkloadApplicationPackageName,'\"\n    },\n    {\n        \"name\": \"WORKLOAD_APP_PACKAGE_VERSION\",\n        \"value\": \"',pipeline().parameters.WorkloadApplicationPackageVersion,'\"\n    },\n    {\n        \"name\": \"MANAGER_APP_PACKAGE\",\n        \"value\": \"',pipeline().parameters.ManagerApplicationPackageName,'\"\n    },\n    {\n        \"name\": \"MANAGER_APP_PACKAGE_VERSION\",\n        \"value\": \"',pipeline().parameters.ManagerApplicationPackageVersion,'\"\n    },\n    {\n        \"name\": \"BATCH_JOB_TIMEOUT\",\n        \"value\": \"',pipeline().parameters.BatchJobTimeout,'\"\n    },\n    {\n        \"name\": \"WORKLOAD_AUTO_STORAGE_ACCOUNT_NAME\",\n        \"value\": \"',pipeline().globalParameters.BatchStorageAccountName,'\"\n    },\n    {\n        \"name\": \"WORKLOAD_USER_ASSIGNED_IDENTITY_RESOURCE_ID\",\n        \"value\": \"',variables('UserAssignedIdentityReference'),'\"\n    },\n    {\n        \"name\": \"WORKLOAD_USER_ASSIGNED_IDENTITY_CLIENT_ID\",\n        \"value\": \"',pipeline().parameters.WorkloadUserAssignedIdentityClientId,'\"\n    }\n    ]')\n)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Monitor Batch Job",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "Start Job",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "pipeline2",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "Set JobContainerName",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "JobContainerName",
+							"value": {
+								"value": "@concat('job-', pipeline().parameters.JobId)",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"BatchPoolId": {
+						"type": "string"
+					},
+					"WorkloadApplicationPackageName": {
+						"type": "string"
+					},
+					"WorkloadApplicationPackageVersion": {
+						"type": "string"
+					},
+					"ManagerApplicationPackageName": {
+						"type": "string"
+					},
+					"ManagerApplicationPackageVersion": {
+						"type": "string"
+					},
+					"ManagerTaskParameters": {
+						"type": "string"
+					},
+					"JobId": {
+						"type": "string"
+					},
+					"TaskOutputFolderPrefix": {
+						"type": "string"
+					},
+					"WorkloadUserAssignedIdentityName": {
+						"type": "string"
+					},
+					"WorkloadUserAssignedIdentityClientId": {
+						"type": "string"
+					},
+					"JobAdditionalEnvironmentSettings": {
+						"type": "array",
+						"defaultValue": []
+					},
+					"OutputStorageAccountName": {
+						"type": "string"
+					},
+					"OutputContainerName": {
+						"type": "string"
+					},
+					"OutputFolderName": {
+						"type": "string"
+					},
+					"BatchJobTimeout": {
+						"type": "string",
+						"defaultValue": "PT8H"
+					}
+				},
+				"variables": {
+					"JobContainerName": {
+						"type": "String"
+					},
+					"ManagerApplicationPackagePath": {
+						"type": "String"
+					},
+					"WorkloadApplicationPackagePath": {
+						"type": "String"
+					},
+					"UserAssignedIdentityReference": {
+						"type": "String"
+					},
+					"CommonEnvironmentSettings": {
+						"type": "Array"
+					},
+					"JobContainerURL": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "batch"
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/pipelines/pipeline2')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/pipeline1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data1",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "PostgreSqlSource"
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "PostgreSqlTable1",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "AzureSqlTable1",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					},
+					{
+						"name": "Copy data2",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "PostgreSqlSource"
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "PostgreSqlTable2",
+								"type": "DatasetReference",
+								"parameters": {
+									"table1": "users"
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "AzureSqlTable2",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					},
+					{
+						"name": "Data flow1",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [
+							{
+								"activity": "Copy data1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "Copy data2",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "dataflow1",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"source2": {},
+									"source3": {},
+									"sink1": {}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"Source1": {
+						"type": "string",
+						"defaultValue": "PostgreSqlTable1"
+					},
+					"Source2": {
+						"type": "string",
+						"defaultValue": "PostgreSqlTable2"
+					},
+					"Sink1": {
+						"type": "string",
+						"defaultValue": "AzureSqlTable1"
+					},
+					"Sink2": {
+						"type": "string",
+						"defaultValue": "AzureSqlTable2"
+					}
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-12-29T06:26:52Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/PostgreSqlTable1')]",
+				"[concat(variables('factoryId'), '/datasets/AzureSqlTable1')]",
+				"[concat(variables('factoryId'), '/datasets/PostgreSqlTable2')]",
+				"[concat(variables('factoryId'), '/datasets/AzureSqlTable2')]",
+				"[concat(variables('factoryId'), '/dataflows/dataflow1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/pipeline2')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "List Folders",
+						"type": "WebActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"url": {
+								"value": "@concat('https://',pipeline().globalParameters.SourceStorageAccountName,'.blob.core.windows.net/',pipeline().parameters.SourceContainerName,'?restype=container&comp=list&prefix=',pipeline().parameters.SourceFolderPrefix,'&delimiter=$SourceBlobDelimiter')",
+								"type": "Expression"
+							},
+							"method": "GET",
+							"headers": {
+								"x-ms-version": "2023-01-03"
+							},
+							"authentication": {
+								"type": "MSI",
+								"resource": "https://storage.azure.com"
+							}
+						}
+					},
+					{
+						"name": "For Each SourceFolder",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "List Folders",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@xpath(xml(activity('List Folders').output.Response),'/EnumerationResults/Blobs/BlobPrefix/Name/text()')",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy files to Destination",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "PostgreSqlSource"
+										},
+										"sink": {
+											"type": "AzureSqlSink",
+											"writeBehavior": "insert",
+											"sqlWriterUseTableLock": false
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "PostgreSqlTable1",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "AzureSqlTable4",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceContainerName": {
+						"type": "string"
+					},
+					"SourceFolderPrefix": {
+						"type": "string"
+					},
+					"SinkStorageAccountName": {
+						"type": "string"
+					},
+					"SinkContainerName": {
+						"type": "string"
+					},
+					"SinkFolderName": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "batch"
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/PostgreSqlTable1')]",
+				"[concat(variables('factoryId'), '/datasets/AzureSqlTable4')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/pipeline3')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data1",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"sink": {
+								"type": "AzureTableSink",
+								"azureTableInsertType": "merge",
+								"writeBatchSize": 10000
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "AzureSqlTable1",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "AzureTable1",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/AzureSqlTable1')]",
+				"[concat(variables('factoryId'), '/datasets/AzureTable1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureSqlTable1')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureSqlDatabase1",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": "users"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureSqlDatabase1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureSqlTable2')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureSqlDatabase1",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [
+					{
+						"name": "id",
+						"type": "uniqueidentifier"
+					},
+					{
+						"name": "title",
+						"type": "nvarchar"
+					},
+					{
+						"name": "description",
+						"type": "nvarchar"
+					},
+					{
+						"name": "type",
+						"type": "nvarchar"
+					},
+					{
+						"name": "destination_country",
+						"type": "uniqueidentifier"
+					},
+					{
+						"name": "study_field",
+						"type": "uniqueidentifier"
+					},
+					{
+						"name": "user_id",
+						"type": "uniqueidentifier"
+					},
+					{
+						"name": "is_active",
+						"type": "bit"
+					},
+					{
+						"name": "created_at",
+						"type": "datetimeoffset",
+						"scale": 7
+					},
+					{
+						"name": "updated_at",
+						"type": "datetimeoffset",
+						"scale": 7
+					},
+					{
+						"name": "deleted_at",
+						"type": "datetimeoffset",
+						"scale": 7
+					},
+					{
+						"name": "slug",
+						"type": "nvarchar"
+					},
+					{
+						"name": "college_id",
+						"type": "uniqueidentifier"
+					}
+				],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": "posts"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureSqlDatabase1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureSqlTable4')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureSqlDatabase1",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": "reports"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureSqlDatabase1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureTable1')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureTableStorage1",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureTable",
+				"schema": [],
+				"typeProperties": {
+					"tableName": "users"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/AzureTableStorage1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PostgreSqlTable1')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "PostgreSql1",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "PostgreSqlTable",
+				"schema": [],
+				"typeProperties": {
+					"schema": "public",
+					"table": "users"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/PostgreSql1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PostgreSqlTable2')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "PostgreSql1",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"table1": {
+						"type": "string",
+						"defaultValue": "users"
+					}
+				},
+				"annotations": [],
+				"type": "PostgreSqlTable",
+				"schema": [],
+				"typeProperties": {
+					"schema": "public",
+					"table": "posts"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/PostgreSql1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureSqlDatabase1')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlDatabase",
+				"typeProperties": {
+					"connectionString": "[parameters('AzureSqlDatabase1_connectionString')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/AzureTableStorage1')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureTableStorage",
+				"typeProperties": {
+					"connectionString": "[parameters('AzureTableStorage1_connectionString')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PostgreSql1')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "PostgreSql",
+				"typeProperties": {
+					"connectionString": "[parameters('PostgreSql1_connectionString')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/dataflow1')]",
+			"type": "Microsoft.DataFactory/factories/dataflows",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "MappingDataFlow",
+				"typeProperties": {
+					"sources": [
+						{
+							"dataset": {
+								"referenceName": "AzureSqlTable2",
+								"type": "DatasetReference"
+							},
+							"name": "source2"
+						},
+						{
+							"dataset": {
+								"referenceName": "AzureSqlTable1",
+								"type": "DatasetReference"
+							},
+							"name": "source3"
+						}
+					],
+					"sinks": [
+						{
+							"dataset": {
+								"referenceName": "AzureSqlTable4",
+								"type": "DatasetReference"
+							},
+							"name": "sink1"
+						}
+					],
+					"transformations": [
+						{
+							"name": "join1"
+						},
+						{
+							"name": "aggregate1"
+						}
+					],
+					"scriptLines": [
+						"source(output(",
+						"          id as string,",
+						"          title as string,",
+						"          description as string,",
+						"          type as string,",
+						"          destination_country as string,",
+						"          study_field as string,",
+						"          user_id as string,",
+						"          is_active as boolean,",
+						"          created_at as string,",
+						"          updated_at as string,",
+						"          deleted_at as string,",
+						"          slug as string,",
+						"          college_id as string",
+						"     ),",
+						"     allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     isolationLevel: 'READ_UNCOMMITTED',",
+						"     format: 'table') ~> source2",
+						"source(output(",
+						"          id as string,",
+						"          email as string,",
+						"          is_active as boolean,",
+						"          created_at as string,",
+						"          updated_at as string,",
+						"          role_id as string,",
+						"          is_blocked as boolean",
+						"     ),",
+						"     allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     limit: 100,",
+						"     isolationLevel: 'READ_UNCOMMITTED',",
+						"     format: 'table') ~> source3",
+						"source2, source3 join(user_id == source3@id,",
+						"     joinType:'inner',",
+						"     matchType:'exact',",
+						"     ignoreSpaces: false,",
+						"     broadcast: 'auto')~> join1",
+						"join1 aggregate(groupBy(user_id),",
+						"     number_of_posts = count(source2@id)) ~> aggregate1",
+						"aggregate1 sink(allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     deletable:false,",
+						"     insertable:true,",
+						"     updateable:false,",
+						"     upsertable:false,",
+						"     format: 'table',",
+						"     skipDuplicateMapInputs: true,",
+						"     skipDuplicateMapOutputs: true,",
+						"     errorHandlingOption: 'stopOnFirstError') ~> sink1"
+					]
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/AzureSqlTable2')]",
+				"[concat(variables('factoryId'), '/datasets/AzureSqlTable1')]",
+				"[concat(variables('factoryId'), '/datasets/AzureSqlTable4')]"
+			]
+		}
+	]
+}

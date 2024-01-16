@@ -1,0 +1,22 @@
+{
+	"SourceStorageAccountName": {
+		"type": "string",
+		"value": "assa"
+	},
+	"BatchStorageAccountName": {
+		"type": "string",
+		"value": "BatchStorageAccountName"
+	},
+	"BatchURI": {
+		"type": "string",
+		"value": "BatchURI"
+	},
+	"BatchAccountSubscription": {
+		"type": "string",
+		"value": "BatchAccountSubscription"
+	},
+	"BatchAccountResourceGroup": {
+		"type": "string",
+		"value": "BatchAccountResourceGroup"
+	}
+}

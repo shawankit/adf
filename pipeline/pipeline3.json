@@ -64,17 +64,6 @@
 							},
 							{
 								"source": {
-									"name": "id",
-									"type": "Guid",
-									"physicalType": "uniqueidentifier"
-								},
-								"sink": {
-									"name": "id",
-									"type": "Guid"
-								}
-							},
-							{
-								"source": {
 									"name": "is_active",
 									"type": "Boolean",
 									"physicalType": "bit"

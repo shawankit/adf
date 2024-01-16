@@ -23,6 +23,7 @@
 					"sink": {
 						"type": "AzureTableSink",
 						"azureTableInsertType": "merge",
+						"azureTablePartitionKeyName": "email",
 						"writeBatchSize": 10000
 					},
 					"enableStaging": false,

@@ -23,11 +23,91 @@
 					"sink": {
 						"type": "AzureTableSink",
 						"azureTableInsertType": "merge",
+						"azureTablePartitionKeyName": "id",
 						"writeBatchSize": 10000
 					},
 					"enableStaging": false,
 					"translator": {
 						"type": "TabularTranslator",
+						"mappings": [
+							{
+								"source": {
+									"name": "created_at",
+									"type": "DateTimeOffset",
+									"physicalType": "datetimeoffset"
+								},
+								"sink": {
+									"name": "created_at",
+									"type": "DateTimeOffset"
+								}
+							},
+							{
+								"source": {
+									"name": "email",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "email",
+									"type": "String"
+								}
+							},
+							{
+								"source": {
+									"name": "id",
+									"type": "Guid",
+									"physicalType": "uniqueidentifier"
+								},
+								"sink": {
+									"name": "id",
+									"type": "Guid"
+								}
+							},
+							{
+								"source": {
+									"name": "is_active",
+									"type": "Boolean",
+									"physicalType": "bit"
+								},
+								"sink": {
+									"name": "is_active",
+									"type": "Boolean"
+								}
+							},
+							{
+								"source": {
+									"name": "is_blocked",
+									"type": "Boolean",
+									"physicalType": "bit"
+								},
+								"sink": {
+									"name": "is_blocked",
+									"type": "Boolean"
+								}
+							},
+							{
+								"source": {
+									"name": "role_id",
+									"type": "Guid",
+									"physicalType": "uniqueidentifier"
+								},
+								"sink": {
+									"name": "role_id",
+									"type": "Guid"
+								}
+							},
+							{
+								"source": {
+									"name": "updated_at",
+									"type": "DateTimeOffset",
+									"physicalType": "datetimeoffset"
+								},
+								"sink": {
+									"name": "updated_at",
+									"type": "DateTimeOffset"
+								}
+							}
+						],
 						"typeConversion": true,
 						"typeConversionSettings": {
 							"allowDataTruncation": true,

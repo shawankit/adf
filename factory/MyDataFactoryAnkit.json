@@ -13,6 +13,10 @@
 			"BatchURI": {
 				"type": "string",
 				"value": "BatchURI"
+			},
+			"BatchAccountSubscription": {
+				"type": "string",
+				"value": "BatchAccountSubscription"
 			}
 		}
 	},

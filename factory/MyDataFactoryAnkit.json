@@ -17,6 +17,10 @@
 			"BatchAccountSubscription": {
 				"type": "string",
 				"value": "BatchAccountSubscription"
+			},
+			"BatchAccountResourceGroup": {
+				"type": "string",
+				"value": "BatchAccountResourceGroup"
 			}
 		}
 	},
